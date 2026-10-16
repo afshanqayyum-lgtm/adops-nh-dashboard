@@ -10,6 +10,7 @@ function generateClientReportV2() {
   if (!acc && !par3 && !dev) { alert('Please select at least a Parent Account, Account or Development before generating a report.'); return; }
 
   const clientName = acc || par3 || dev || 'Client';
+  const development = (dev && dev !== clientName) ? dev : '';   // goes in the {{DEVELOPMENT}} tag on the cover
   const fromEl = document.getElementById('date-from');
   const toEl   = document.getElementById('date-to');
   const dateRange = (fromEl&&toEl) ? (fmtMonth2(fromEl.value?.slice(0,7).split('-').reverse().join('/')) + ' \u2013 ' + fmtMonth2(toEl.value?.slice(0,7).split('-').reverse().join('/'))) : 'All time';
@@ -207,7 +208,7 @@ function generateClientReportV2() {
   });
 
   const payload = {
-    v: 2, a: clientName, d: dateRange, clientName: clientName, dateRange: dateRange,
+    v: 2, a: clientName, d: dateRange, clientName: clientName, dateRange: dateRange, development: development,
     products: {
       FB: FB,
       EM: emailRows.length ? emailLike(emailRows) : null,
