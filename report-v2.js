@@ -195,6 +195,27 @@ function generateClientReportV2() {
     if (m.contractNumber && bundleGroups[key]) bundleGroups[key].cins.add(cin);
   });
 
+  const overlapsRange = cins => {
+    const mFrom = (typeof monthFrom !== 'undefined') ? monthFrom : '';
+    const mTo   = (typeof monthTo   !== 'undefined') ? monthTo   : '';
+    for (const cin of cins) {
+      const meta = lookup(cin);
+      const start = meta.startDate ? meta.startDate.slice(0,7) : '';
+      const end   = meta.endDate   ? meta.endDate.slice(0,7)   : '';
+      if (!start && !end) {                       // no dates: look for any activity in the range
+        const hasActivity = D2.sf_raw.some(r=>r.cin===cin&&inRange2(r.month))
+          || (D2.fb_raw||[]).some(r=>r.cin===cin&&inRange2(r.month))
+          || (D2.insearch_raw||[]).some(r=>r.cin===cin&&inRange2(r.date||r.month))
+          || (D2.gam_raw||[]).some(r=>r.cin===cin&&inRange2(r.month));
+        if (hasActivity) return true;
+        continue;
+      }
+      const fromOk = !mFrom || !end   || end   >= mFrom;
+      const toOk   = !mTo   || !start || start <= mTo;
+      if (fromOk && toOk) return true;
+    }
+    return false;
+  };
   const insearchCins = new Set((D2.insearch_raw||[]).map(r=>r.cin));
   const bundleLabel = { B1: 'Development Accelerator', B2: 'Event Promoter' };   // title on the bundle slides
   const bundles = {};
@@ -204,6 +225,8 @@ function generateClientReportV2() {
     if (!slot) { console.warn('Bundle type has no slides in the template. Skipped:', g.opp, type); return; }
     if (bundles[slot]) { console.warn('More than one ' + type + ' bundle is selected. Using the first. Skipped:', g.opp); return; }
     const S = g.cins;
+    // Same rule as the Client Performance screen: show the whole bundle if any of its CINs overlaps the date range
+    if (!(typeof isAllTime !== 'undefined' && isAllTime) && !overlapsRange([...S])) return;
     const sfIn  = p => D2.sf_raw.filter(r=>r.product===p&&S.has(r.cin)&&(r.opens>0||r.clicks>0));
     const gamIn = p => (D2.gam_raw||[]).filter(r=>r.product===p&&S.has(r.cin)&&(r.impressions>0||r.clicks>0));
 
