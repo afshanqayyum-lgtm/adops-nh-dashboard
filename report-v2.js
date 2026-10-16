@@ -159,7 +159,7 @@ function generateClientReportV2() {
   const bundleGroups = {};
   bundleRows.forEach(r => {
     const key = (r.contractNumber || ('no-contract-' + r.opportunity)) + '|' + (r.account||'');
-    if (!bundleGroups[key]) bundleGroups[key] = {opp: r.opportunity, cins: new Set()};
+    if (!bundleGroups[key]) bundleGroups[key] = {opp: r.opportunity, dev: r.dev || '', cins: new Set()};
     if (r.cin) bundleGroups[key].cins.add(r.cin);
   });
   Object.entries(D2.sf_cin_lookup||{}).forEach(([cin,m])=>{
@@ -168,6 +168,7 @@ function generateClientReportV2() {
   });
 
   const insearchCins = new Set((D2.insearch_raw||[]).map(r=>r.cin));
+  const bundleLabel = { B1: 'Development Accelerator', B2: 'Event Promoter' };   // title on the bundle slides
   const bundles = {};
   Object.values(bundleGroups).forEach(g => {
     const type = gd2BundleType(g.opp);
@@ -196,7 +197,7 @@ function generateClientReportV2() {
 
     if (hwList.length > 3) console.warn('Bundle has ' + hwList.length + ' HOTW Boost sends. The template shows 3.');
     bundles[slot] = {
-      name: g.opp, campaigns: act.size, impressions: fmtB(impOpen), clicks: fmtN(clk),
+      name: bundleLabel[slot] + (g.dev ? ' - ' + g.dev : ''), campaigns: act.size, impressions: fmtB(impOpen), clicks: fmtN(clk),
       comps: {
         IS: first(isList, 'In-Search'), FB: first(fbList, 'AdReach'),
         HW1: hwList[0]||null, HW2: hwList[1]||null, HW3: hwList[2]||null,
