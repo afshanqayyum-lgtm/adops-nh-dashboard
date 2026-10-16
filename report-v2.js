@@ -28,7 +28,10 @@ function generateClientReportV2() {
   const hotwRows  = D2.sf_raw.filter(r=>r.product==='HOTW Boost'&&validParent(r)&&inRange2(r.month)&&matchRow(r)&&(r.opens>0||r.clicks>0)&&!bundleCins.has(r.cin));
   const mmRows    = D2.sf_raw.filter(r=>r.product==='Mobile Messaging'&&validParent(r)&&inRange2(r.month)&&matchRow(r)&&(r.sends>0||r.clicks>0)&&!bundleCins.has(r.cin));
   const fbRows    = D2.fb_raw.filter(r=>validParent(r)&&inRange2(r.month)&&matchRow(r)&&(r.impressions>0||r.clicks>0||r.leads>0)&&!bundleCins.has(r.cin));
-  const isRows    = (D2.insearch_raw||[]).filter(r=>inRange2(r.date||r.month)&&matchRow(r)&&(r.impressions>0||r.clicks>0)&&!bundleCins.has(r.cin));
+  // In-Search comes from insearch_raw, and from the GAM data for CINs that are not in insearch_raw
+  const insearchCinsAll = new Set((D2.insearch_raw||[]).map(r=>r.cin));
+  const isRows    = (D2.insearch_raw||[]).filter(r=>inRange2(r.date||r.month)&&matchRow(r)&&(r.impressions>0||r.clicks>0)&&!bundleCins.has(r.cin))
+    .concat((D2.gam_raw||[]).filter(r=>r.product==='In-Search'&&!insearchCinsAll.has(r.cin)&&validParent(r)&&inRange2(r.month)&&matchRow(r)&&(r.impressions>0||r.clicks>0)&&!bundleCins.has(r.cin)));
 
   const fmtP = n => n ? parseFloat(n).toFixed(2)+'%' : '0.00%';
   const fmtN = n => n == null ? '0' : Math.round(n).toLocaleString();
