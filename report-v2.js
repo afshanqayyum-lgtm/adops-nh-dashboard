@@ -170,23 +170,23 @@ function generateClientReportV2() {
     if (!slot) { console.warn('Bundle type has no slides in the template. Skipped:', g.opp, type); return; }
     if (bundles[slot]) { console.warn('More than one ' + type + ' bundle is selected. Using the first. Skipped:', g.opp); return; }
     const S = g.cins;
-    const sfIn  = p => D2.sf_raw.filter(r=>r.product===p&&S.has(r.cin)&&inRange2(r.month)&&(r.opens>0||r.clicks>0));
-    const gamIn = p => (D2.gam_raw||[]).filter(r=>r.product===p&&S.has(r.cin)&&inRange2(r.month)&&(r.impressions>0||r.clicks>0));
+    const sfIn  = p => D2.sf_raw.filter(r=>r.product===p&&S.has(r.cin)&&(r.opens>0||r.clicks>0));
+    const gamIn = p => (D2.gam_raw||[]).filter(r=>r.product===p&&S.has(r.cin)&&(r.impressions>0||r.clicks>0));
 
     const hwList = aggSf(sfIn('HOTW Boost')).sort(byDate).map(toEmlComp);
     const emList = aggSf(sfIn('Email Campaign')).sort(byDate).map(toEmlComp);
-    const isList = aggImp((D2.insearch_raw||[]).filter(r=>S.has(r.cin)&&inRange2(r.date||r.month)&&(r.impressions>0||r.clicks>0)))
+    const isList = aggImp((D2.insearch_raw||[]).filter(r=>S.has(r.cin)&&(r.impressions>0||r.clicks>0)))
       .concat(aggImp(gamIn('In-Search').filter(r=>!insearchCins.has(r.cin)))).map(toImpComp);
-    const fbList = aggImp(D2.fb_raw.filter(r=>S.has(r.cin)&&inRange2(r.month)&&(r.impressions>0||r.clicks>0))).map(toImpComp);
+    const fbList = aggImp(D2.fb_raw.filter(r=>S.has(r.cin)&&(r.impressions>0||r.clicks>0))).map(toImpComp);
     const asList = aggImp(gamIn('Area Sponsorship')).map(toImpComp);
     const psList = aggImp(gamIn('Property Sponsorship')).map(toImpComp);
 
     // Bundle totals: impressions + opens, clicks, active CINs (same rule as the dashboard)
     const act = new Set(); let impOpen = 0, clk = 0;
     sfIn('Email Campaign').concat(sfIn('HOTW Boost')).forEach(r=>{ impOpen+=r.opens||0; clk+=r.clicks||0; act.add(r.cin); });
-    D2.fb_raw.filter(r=>S.has(r.cin)&&inRange2(r.month)&&(r.impressions>0||r.clicks>0)).forEach(r=>{ impOpen+=r.impressions||0; clk+=r.clicks||0; act.add(r.cin); });
-    (D2.insearch_raw||[]).filter(r=>S.has(r.cin)&&inRange2(r.date||r.month)&&(r.impressions>0||r.clicks>0)).forEach(r=>{ impOpen+=r.impressions||0; clk+=r.clicks||0; act.add(r.cin); });
-    (D2.gam_raw||[]).filter(r=>S.has(r.cin)&&(r.product!=='In-Search'||!insearchCins.has(r.cin))&&inRange2(r.month)&&(r.impressions>0||r.clicks>0)).forEach(r=>{ impOpen+=r.impressions||0; clk+=r.clicks||0; act.add(r.cin); });
+    D2.fb_raw.filter(r=>S.has(r.cin)&&(r.impressions>0||r.clicks>0)).forEach(r=>{ impOpen+=r.impressions||0; clk+=r.clicks||0; act.add(r.cin); });
+    (D2.insearch_raw||[]).filter(r=>S.has(r.cin)&&(r.impressions>0||r.clicks>0)).forEach(r=>{ impOpen+=r.impressions||0; clk+=r.clicks||0; act.add(r.cin); });
+    (D2.gam_raw||[]).filter(r=>S.has(r.cin)&&(r.product!=='In-Search'||!insearchCins.has(r.cin))&&(r.impressions>0||r.clicks>0)).forEach(r=>{ impOpen+=r.impressions||0; clk+=r.clicks||0; act.add(r.cin); });
     if (!act.size) return;
 
     if (hwList.length > 3) console.warn('Bundle has ' + hwList.length + ' HOTW Boost sends. The template shows 3.');
