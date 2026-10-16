@@ -43,6 +43,32 @@ function generateClientReportV2() {
   const lookup  = cin => (D2.sf_cin_lookup||{})[cin]||{};
   const rangeOf = (s,e) => (s&&e) ? fmtDDMMYYYY(s)+' - '+fmtDDMMYYYY(e) : (s ? fmtDDMMYYYY(s)+' - ongoing' : '');
 
+  // ── Benchmarks: weighted average of ALL New Homes campaigns of the same product, in the report date range ──
+  const sumOf = (rows, f) => rows.reduce((t,r)=>t+(f(r)||0), 0);
+  const pctOf = (a, b) => b ? fmtP(a/b*100) : null;
+  const benchLine = parts => { const p = parts.filter(x=>x[1]).map(x=>x[0]+' '+x[1]); return p.length ? 'Zoopla New Homes average: ' + p.join(' \u00B7 ') : ''; };
+  const sfBench = product => {                        // Email Campaign, HOTW Boost, Mobile Messaging
+    const rows = D2.sf_raw.filter(r=>r.product===product&&validParent(r)&&inRange2(r.month));
+    if (product === 'Mobile Messaging') return benchLine([['CTR', pctOf(sumOf(rows,r=>r.clicks), sumOf(rows,r=>r.sends))]]);
+    return benchLine([['open rate', pctOf(sumOf(rows,r=>r.opens), sumOf(rows,r=>r.sends))], ['click to open', pctOf(sumOf(rows,r=>r.clicks), sumOf(rows,r=>r.opens))]]);
+  };
+  const fbBench = (product, ctrOnly) => {             // same Facebook product as the campaign
+    const rows = D2.fb_raw.filter(r=>r.product===product&&validParent(r)&&inRange2(r.month));
+    const ctr = pctOf(sumOf(rows,r=>r.clicks), sumOf(rows,r=>r.impressions));
+    const cr  = pctOf(sumOf(rows,r=>r.leads), sumOf(rows,r=>r.clicks));
+    return (ctrOnly || product === 'Facebook CTW') ? benchLine([['CTR', ctr]]) : benchLine([['conversion rate', cr], ['CTR', ctr]]);
+  };
+  const isBench = () => {                             // In-Search: insearch_raw + GAM In-Search not in insearch_raw
+    const insCins = new Set((D2.insearch_raw||[]).map(r=>r.cin));
+    const rows = (D2.insearch_raw||[]).filter(r=>inRange2(r.date||r.month))
+      .concat((D2.gam_raw||[]).filter(r=>r.product==='In-Search'&&!insCins.has(r.cin)&&validParent(r)&&inRange2(r.month)));
+    return benchLine([['CTR', pctOf(sumOf(rows,r=>r.clicks), sumOf(rows,r=>r.impressions))]]);
+  };
+  const gamBench = product => {                       // Area Sponsorship, Property Sponsorship
+    const rows = (D2.gam_raw||[]).filter(r=>r.product===product&&validParent(r)&&inRange2(r.month));
+    return benchLine([['CTR', pctOf(sumOf(rows,r=>r.clicks), sumOf(rows,r=>r.impressions))]]);
+  };
+
   // Email-type rows: one line per CIN (rows can be per month)
   const aggSf = rows => {
     const m = {};
@@ -55,7 +81,8 @@ function generateClientReportV2() {
     });
     return Object.values(m);
   };
-  const emailLike = rows => {
+  const emailLike = (rows, product) => {
+    const bench = sfBench(product);
     const list = aggSf(rows).map(c => ({...c, or: c.sends?c.opens/c.sends*100:0, ctor: c.opens?c.clicks/c.opens*100:0}));
     list.sort((a,b)=>b.or-a.or);
     const tot = list.reduce((t,c)=>({sends:t.sends+c.sends,opens:t.opens+c.opens,clicks:t.clicks+c.clicks}),{sends:0,opens:0,clicks:0});
@@ -66,7 +93,7 @@ function generateClientReportV2() {
       campaigns: list.slice(0,5).map(c => ({
         cin: c.cin, dev: c.dev, postcode: c.area||'',
         dates: c.startDate ? fmtDDMMYYYY(c.startDate) : '',
-        sent: fmtN(c.sends), opens: fmtN(c.opens), or: fmtP(c.or), ctor: fmtP(c.ctor), clicks: fmtN(c.clicks), bench: ''
+        sent: fmtN(c.sends), opens: fmtN(c.opens), or: fmtP(c.or), ctor: fmtP(c.ctor), clicks: fmtN(c.clicks), bench: bench
       }))
     };
   };
@@ -76,7 +103,7 @@ function generateClientReportV2() {
   if (fbRows.length) {
     const m = {};
     fbRows.forEach(r => {
-      if (!m[r.cin]) m[r.cin] = {cin:r.cin, dev:r.dev, area:r.area||'', imp:0, clicks:0, leads:0};
+      if (!m[r.cin]) m[r.cin] = {cin:r.cin, dev:r.dev, area:r.area||'', product:r.product||'', imp:0, clicks:0, leads:0};
       m[r.cin].imp += r.impressions; m[r.cin].clicks += r.clicks; m[r.cin].leads += r.leads;
     });
     const list = Object.values(m).map(c => ({...c, cr: c.clicks>0?c.leads/c.clicks*100:0, ctr: c.imp>0?c.clicks/c.imp*100:0}));
@@ -88,7 +115,7 @@ function generateClientReportV2() {
       campaigns: list.slice(0,5).map(c => ({
         cin: c.cin, dev: c.dev, postcode: c.area || lookup(c.cin).area || '',
         dates: rangeOf(lookup(c.cin).startDate, lookup(c.cin).endDate),
-        imps: fmtN(c.imp), clicks: fmtN(c.clicks), ctr: fmtP(c.ctr), leads: fmtN(c.leads), cr: fmtP(c.cr), bench: ''
+        imps: fmtN(c.imp), clicks: fmtN(c.clicks), ctr: fmtP(c.ctr), leads: fmtN(c.leads), cr: fmtP(c.cr), bench: fbBench(c.product)
       }))
     };
   }
@@ -111,7 +138,7 @@ function generateClientReportV2() {
       campaigns: list.slice(0,5).map(c => ({
         cin: c.cin, dev: c.dev, postcode: c.area || lookup(c.cin).area || '',
         dates: rangeOf(lookup(c.cin).startDate, endOf(c.cin)),
-        imps: fmtN(c.imp), clicks: fmtN(c.clicks), ctr: fmtP(c.ctr), bench: ''
+        imps: fmtN(c.imp), clicks: fmtN(c.clicks), ctr: fmtP(c.ctr), bench: isBench()
       }))
     };
   }
@@ -128,7 +155,7 @@ function generateClientReportV2() {
       campaigns: list.slice(0,5).map(c => ({
         cin: c.cin, dev: c.dev, postcode: c.area||'',
         dates: c.startDate ? fmtDDMMYYYY(c.startDate) : '',
-        sends: fmtN(c.sends), clicks: fmtN(c.clicks), ctr: fmtP(c.ctr), bench: ''
+        sends: fmtN(c.sends), clicks: fmtN(c.clicks), ctr: fmtP(c.ctr), bench: sfBench('Mobile Messaging')
       }))
     };
   }
@@ -138,21 +165,21 @@ function generateClientReportV2() {
   const aggImp = rows => {
     const m = {};
     rows.forEach(r => {
-      if (!m[r.cin]) m[r.cin] = {cin:r.cin, dev:r.dev, area:r.area||'', imp:0, clicks:0};
+      if (!m[r.cin]) m[r.cin] = {cin:r.cin, dev:r.dev, area:r.area||'', product:r.product||'', imp:0, clicks:0};
       m[r.cin].imp += r.impressions||0; m[r.cin].clicks += r.clicks||0;
     });
     return Object.values(m);
   };
-  const toImpComp = c => ({
+  const toImpComp = (c, bench) => ({
     cin: c.cin, dev: c.dev, postcode: c.area||'',
     dates: rangeOf(lookup(c.cin).startDate, lookup(c.cin).endDate),
-    imps: fmtN(c.imp), clicks: fmtN(c.clicks), ctr: fmtP(c.imp?c.clicks/c.imp*100:0), bench: ''
+    imps: fmtN(c.imp), clicks: fmtN(c.clicks), ctr: fmtP(c.imp?c.clicks/c.imp*100:0), bench: bench||''
   });
-  const toEmlComp = c => ({
+  const toEmlComp = (c, bench) => ({
     cin: c.cin, dev: c.dev, postcode: c.area||'',
     dates: c.startDate ? fmtDDMMYYYY(c.startDate) : '',
     sent: fmtN(c.sends), opens: fmtN(c.opens), clicks: fmtN(c.clicks),
-    or: fmtP(c.sends?c.opens/c.sends*100:0), ctor: fmtP(c.opens?c.clicks/c.opens*100:0), bench: ''
+    or: fmtP(c.sends?c.opens/c.sends*100:0), ctor: fmtP(c.opens?c.clicks/c.opens*100:0), bench: bench||''
   });
   const byDate = (a,b) => String(a.startDate).localeCompare(String(b.startDate));
   const first = (list, name) => { if (list.length > 1) console.warn('Bundle has ' + list.length + ' ' + name + ' campaigns. Using the first.'); return list[0] || null; };
@@ -180,13 +207,13 @@ function generateClientReportV2() {
     const sfIn  = p => D2.sf_raw.filter(r=>r.product===p&&S.has(r.cin)&&(r.opens>0||r.clicks>0));
     const gamIn = p => (D2.gam_raw||[]).filter(r=>r.product===p&&S.has(r.cin)&&(r.impressions>0||r.clicks>0));
 
-    const hwList = aggSf(sfIn('HOTW Boost')).sort(byDate).map(toEmlComp);
-    const emList = aggSf(sfIn('Email Campaign')).sort(byDate).map(toEmlComp);
+    const hwList = aggSf(sfIn('HOTW Boost')).sort(byDate).map(c=>toEmlComp(c, sfBench('HOTW Boost')));
+    const emList = aggSf(sfIn('Email Campaign')).sort(byDate).map(c=>toEmlComp(c, sfBench('Email Campaign')));
     const isList = aggImp((D2.insearch_raw||[]).filter(r=>S.has(r.cin)&&(r.impressions>0||r.clicks>0)))
-      .concat(aggImp(gamIn('In-Search').filter(r=>!insearchCins.has(r.cin)))).map(toImpComp);
-    const fbList = aggImp(D2.fb_raw.filter(r=>S.has(r.cin)&&(r.impressions>0||r.clicks>0))).map(toImpComp);
-    const asList = aggImp(gamIn('Area Sponsorship')).map(toImpComp);
-    const psList = aggImp(gamIn('Property Sponsorship')).map(toImpComp);
+      .concat(aggImp(gamIn('In-Search').filter(r=>!insearchCins.has(r.cin)))).map(c=>toImpComp(c, isBench()));
+    const fbList = aggImp(D2.fb_raw.filter(r=>S.has(r.cin)&&(r.impressions>0||r.clicks>0))).map(c=>toImpComp(c, fbBench(c.product, true)));
+    const asList = aggImp(gamIn('Area Sponsorship')).map(c=>toImpComp(c, gamBench('Area Sponsorship')));
+    const psList = aggImp(gamIn('Property Sponsorship')).map(c=>toImpComp(c, gamBench('Property Sponsorship')));
 
     // Bundle totals: impressions + opens, clicks, active CINs (same rule as the dashboard)
     const act = new Set(); let impOpen = 0, clk = 0;
@@ -211,9 +238,9 @@ function generateClientReportV2() {
     v: 2, a: clientName, d: dateRange, clientName: clientName, dateRange: dateRange, development: development,
     products: {
       FB: FB,
-      EM: emailRows.length ? emailLike(emailRows) : null,
+      EM: emailRows.length ? emailLike(emailRows, 'Email Campaign') : null,
       IS: IS,
-      HW: hotwRows.length ? emailLike(hotwRows) : null,
+      HW: hotwRows.length ? emailLike(hotwRows, 'HOTW Boost') : null,
       MM: MM
     },
     bundles: bundles
